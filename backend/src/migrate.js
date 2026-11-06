@@ -11,7 +11,7 @@ export async function migrate(pool) {
     await client.query('CREATE TABLE IF NOT EXISTS schema_migrations (name TEXT PRIMARY KEY, checksum TEXT NOT NULL, applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW())');
     const directory = new URL('../migrations/', import.meta.url);
     for (const name of (await readdir(directory)).filter(n => n.endsWith('.sql')).sort()) {
-      const sql = await readFile(new URL(name, directory), 'utf8');
+      const sql = (await readFile(new URL(name, directory), 'utf8')).replace(/\r\n/g, '\n');
       const checksum = createHash('sha256').update(sql).digest('hex');
       const { rows } = await client.query('SELECT checksum FROM schema_migrations WHERE name=$1', [name]);
       if (rows.length) {
