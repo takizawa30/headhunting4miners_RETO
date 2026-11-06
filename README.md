@@ -5,8 +5,9 @@ Aplicación pequeña para crear, listar, editar y eliminar equipos mineros; cont
 ## Enlaces de entrega
 
 - Repositorio público: https://github.com/takizawa30/headhunting4miners_RETO
-- Frontend: pendiente de publicar; se actualizará al verificar el despliegue.
-- Backend: pendiente de publicar; se actualizará al verificar el despliegue.
+- Frontend: https://minetrack-web.onrender.com
+- Backend: https://minetrack-api-h9ld.onrender.com
+- Salud de API y PostgreSQL: https://minetrack-api-h9ld.onrender.com/health
 - El video se entrega como archivo en la plataforma. Guion: [docs/video.md](docs/video.md).
 
 ## Stack y estructura
