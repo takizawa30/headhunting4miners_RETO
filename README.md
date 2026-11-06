@@ -8,7 +8,7 @@ Aplicación pequeña para crear, listar, editar y eliminar equipos mineros; cont
 - Frontend: https://minetrack-web.onrender.com
 - Backend: https://minetrack-api-h9ld.onrender.com
 - Salud de API y PostgreSQL: https://minetrack-api-h9ld.onrender.com/health
-- El video se entrega como archivo en la plataforma. Guion: [docs/video.md](docs/video.md).
+- El video de demostración se entrega como archivo en la plataforma de evaluación.
 
 ## Stack y estructura
 
@@ -200,8 +200,10 @@ npm run build
 
 Para una base de pruebas propia, define `TEST_DATABASE_URL` y ejecuta `npm test`. Usa una base dedicada, nunca la de producción. La integración crea códigos únicos y elimina sus propios registros. Verifica migraciones repetidas, alta, duplicados, edición, horómetro decreciente, mantenimiento, historial, concurrencia y borrado en cascada. GitHub Actions ejecuta estas pruebas con PostgreSQL real.
 
-## Uso de IA y explicación
+## Herramientas de apoyo
 
-Se utilizó **OpenAI Codex** para implementar la aplicación, escribir y ejecutar pruebas, documentar y preparar la automatización; su control de navegador ayudó a revisar GitHub y el hosting. El candidato debe revisar y poder explicar el código entregado.
+Se utilizó OpenAI Codex como apoyo en el desarrollo, las pruebas, la documentación y la configuración del despliegue.
 
-Para explicar la solución: el frontend usa `fetch` contra otra URL; Express valida las entradas y calcula el estado desde datos relacionales; PostgreSQL guarda el horómetro acumulado y la referencia del último mantenimiento; una transacción mantiene historial y referencia consistentes. El despliegue es un programa Node multiplataforma que valida, construye, migra, publica un SHA concreto y verifica la versión real servida.
+## Docker
+
+El repositorio incluye `backend/Dockerfile` y `compose.yaml` para ejecutar la API y PostgreSQL localmente. **El despliegue público usa el runtime Node de Render, no contenedores Docker.** La configuración de Docker está incluida como alternativa; no se ha validado ejecutándola en esta máquina, que no tiene Docker instalado.

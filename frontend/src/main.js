@@ -23,16 +23,17 @@ const escape = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp
 const number = n => new Intl.NumberFormat('es-PE', { maximumFractionDigits: 1 }).format(n);
 let equipment = [], types = [], query = '', filter = 'all', typeFilter = '', loading = true, loadError = '', online = false;
 let currentModal = null;
+let loadSequence = 0, submitting = false;
 const app = document.querySelector('#app');
 app.innerHTML = `
-  <aside class="sidebar"><a class="brand" href="/">${icon('mountain')}<span>MineTrack<span class="brand-dot">®</span></span></a>
+  <aside class="sidebar"><a class="brand" href="/">${icon('mountain')}<span>MineTrack</span></a>
     <div class="workspace"><span class="workspace-mark">M</span><div>Operación minera<small>Gestión de activos</small></div><span class="workspace-chevron">⌄</span></div>
     <p class="nav-caption">ESPACIO DE TRABAJO</p>
     <nav><a class="nav-item active" href="#equipos">${icon('fleet')}<span>Equipos</span><span id="nav-count" class="nav-count">0</span></a><a class="nav-item" href="#intervalos">${icon('clock')}<span>Intervalos</span></a></nav>
     <div class="sidebar-bottom"><div class="sidebar-note">Cada hora cuenta.<p>Una flota al día empieza con un buen registro.</p>${icon('mountain')}</div><div class="profile"><span>OP</span><div>Panel de operaciones<small>Registro de equipos mineros</small></div></div></div>
   </aside>
   <main><header class="topbar"><div>Operaciones <span>/</span> <strong>Control de flota</strong></div><span class="connection" id="connection"><i></i> Conectando API</span></header>
-  <section class="content" id="equipos"><div class="page-heading"><div><div class="eyebrow">CONTROL DE FLOTA <span>•</span> MANTENIMIENTO PREVENTIVO</div><h1>Tu flota, bajo control<span>.</span></h1><p>Supervisa las horas de uso y mantén tus equipos listos para operar.</p></div><button class="primary" id="new-equipment">${icon('plus')} Nuevo equipo</button></div>
+  <section class="content" id="equipos"><div class="page-heading"><div><div class="eyebrow">CONTROL DE FLOTA <span>•</span> MANTENIMIENTO PREVENTIVO</div><h1>Tu flota, bajo control<span>.</span></h1><p>Cada equipo listo. Cada turno bajo control.</p></div><button class="primary" id="new-equipment">${icon('plus')} Nuevo equipo</button></div>
   <div class="stats" id="stats"></div>
   <section class="fleet-panel"><div class="panel-heading"><div><h2>Registro de equipos <span id="total-badge">0</span></h2><p>El estado de tu operación, en un solo lugar.</p></div><button class="text-button" id="refresh">${icon('history')} Actualizar</button></div>
     <div class="toolbar"><div class="tabs" role="group" aria-label="Filtrar por estado"><button data-filter="all" class="selected">Todos los equipos</button><button data-filter="due">Requieren atención <span id="due-count">0</span></button></div><div class="table-filters"><label class="search">${icon('search')}<input id="search" placeholder="Buscar por código…" aria-label="Buscar por código" /></label><select id="type-filter" aria-label="Filtrar por tipo"><option value="">Todos los tipos</option><option value="camion">Camión</option><option value="excavadora">Excavadora</option><option value="perforadora">Perforadora</option></select></div></div>
@@ -43,9 +44,11 @@ app.innerHTML = `
   </section></main><dialog id="modal"></dialog><div id="toast" role="status" aria-live="polite"></div>`;
 
 async function request(path, options = {}) {
-  const response = await fetch(`${API}${path}`, { ...options, headers: { 'Content-Type': 'application/json', ...options.headers }, signal: AbortSignal.timeout(90000) });
+  let response;
+  try { response = await fetch(`${API}${path}`, { ...options, headers: { ...(options.body ? { 'Content-Type': 'application/json' } : {}), ...options.headers }, signal: AbortSignal.timeout(90000) }); }
+  catch { throw new Error('No se pudo conectar con la API. Espera un momento y vuelve a intentar.'); }
   if (response.status === 204) return;
-  const data = await response.json();
+  const data = await response.json().catch(() => ({ error: 'El servicio está iniciando o no está disponible. Intenta nuevamente.' }));
   if (!response.ok) throw new Error(data.details?.length ? `${data.error} ${data.details[0].message}` : data.error || `Error HTTP ${response.status}`);
   return data;
 }
@@ -61,16 +64,17 @@ function render() {
   document.querySelector('#total-badge').textContent=equipment.length;
   document.querySelector('#due-count').textContent=due;
   const connection=document.querySelector('#connection'); connection.classList.toggle('online',online); connection.innerHTML=`<i></i> ${online?'API conectada':loading?'Conectando API':'Sin conexión'}`;
-  const filtered=equipment.filter(e=>(filter!=='due'||e.requiresMaintenance)&&(!typeFilter||e.type===typeFilter)&&e.code.toLowerCase().includes(query.toLowerCase()));
-  document.querySelector('#rows').innerHTML=loading ? '<tr><td colspan="5" class="empty">Conectando con la operación… <small>El servicio gratuito puede tardar un minuto en despertar.</small></td></tr>' : loadError ? `<tr><td colspan="5" class="empty error">No pudimos cargar la flota.<small>${escape(loadError)} Usa Actualizar para reintentar.</small></td></tr>` : !filtered.length ? `<tr><td colspan="5" class="empty">${equipment.length?'No hay equipos con estos filtros.':'Tu operación comienza aquí.'}<small>${equipment.length?'Prueba otro código o tipo de equipo.':'Registra tu primer equipo para controlar su mantenimiento.'}</small>${!equipment.length?'<button class="secondary" data-action="new">Registrar primer equipo</button>':''}</td></tr>` : filtered.map(e=>`<tr><td><div class="equipment-name"><span class="equipment-icon ${e.type}">${icon(e.type==='camion'?'truck':'tool')}</span><div><strong>${escape(e.code)}</strong><small>${labels[e.type]}</small></div></div></td><td><span class="hour-value">${number(e.hourmeter)}</span> <span class="unit">h</span></td><td><div class="cycle-label"><span>${number(e.cycleHours)} <small>/ ${number(e.intervalHours)} h</small></span><small>${e.requiresMaintenance?'Intervalo alcanzado':`${number(e.remainingHours)} h restantes`}</small></div><div class="progress ${e.requiresMaintenance?'due':''}"><i style="width:${Math.min(100,e.cycleHours/e.intervalHours*100)}%"></i></div></td><td><span class="status ${e.requiresMaintenance?'due':'ok'}"><i></i>${e.requiresMaintenance?'Requiere mantenimiento':'Al día'}</span></td><td><div class="actions"><button class="action" data-action="maintenance" data-id="${e.id}" aria-label="Registrar mantenimiento de ${escape(e.code)}" title="Registrar mantenimiento">${icon('tool')}</button><button class="action" data-action="history" data-id="${e.id}" aria-label="Ver historial de ${escape(e.code)}" title="Historial">${icon('history')}</button><button class="action" data-action="edit" data-id="${e.id}" aria-label="Editar ${escape(e.code)}" title="Editar">${icon('edit')}</button><button class="action delete" data-action="delete" data-id="${e.id}" aria-label="Eliminar ${escape(e.code)}" title="Eliminar">${icon('trash')}</button></div></td></tr>`).join('');
+  const filtered=equipment.filter(e=>(filter!=='due'||e.requiresMaintenance)&&(!typeFilter||e.type===typeFilter)&&e.code.toLowerCase().includes(query.trim().toLowerCase()));
+  document.querySelector('#rows').innerHTML=loading ? '<tr><td colspan="5" class="empty">Conectando con la operación… <small>El servicio gratuito puede tardar un minuto en despertar.</small></td></tr>' : loadError ? `<tr><td colspan="5" class="empty error">No pudimos cargar la flota.<small>${escape(loadError)} Usa Actualizar para reintentar.</small></td></tr>` : !filtered.length ? `<tr><td colspan="5" class="empty">${equipment.length?'No hay equipos con estos filtros.':'Tu operación comienza aquí.'}<small>${equipment.length?'Prueba otro código o tipo de equipo.':'Registra tu primer equipo para controlar su mantenimiento.'}</small>${!equipment.length?'<button class="secondary" data-action="new">Registrar primer equipo</button>':''}</td></tr>` : filtered.map(e=>`<tr><td><div class="equipment-name"><span class="equipment-icon ${e.type}">${icon(e.type==='camion'?'truck':'tool')}</span><div><strong>${escape(e.code)}</strong><small>${labels[e.type]}</small></div></div></td><td><span class="hour-value">${number(e.hourmeter)}</span> <span class="unit">h</span></td><td><div class="cycle-label"><span>${number(e.cycleHours)} <small>/ ${number(e.intervalHours)} h</small></span><small>${e.requiresMaintenance?'Intervalo alcanzado':`${number(e.remainingHours)} h restantes`}</small></div><div class="progress ${e.requiresMaintenance?'due':''}"><i style="width:${Math.min(100,e.cycleHours/e.intervalHours*100)}%"></i></div></td><td><span class="status ${e.requiresMaintenance?'due':'ok'}"><i></i>${e.requiresMaintenance?'Requiere mantenimiento':'Al día'}</span></td><td><div class="actions"><button class="action" data-action="maintenance" ${e.cycleHours <= 0 ? 'disabled' : ''} data-id="${e.id}" aria-label="Registrar mantenimiento de ${escape(e.code)}" title="Registrar mantenimiento">${icon('tool')}</button><button class="action" data-action="history" data-id="${e.id}" aria-label="Ver historial de ${escape(e.code)}" title="Historial">${icon('history')}</button><button class="action" data-action="edit" data-id="${e.id}" aria-label="Editar ${escape(e.code)}" title="Editar">${icon('edit')}</button><button class="action delete" data-action="delete" data-id="${e.id}" aria-label="Eliminar ${escape(e.code)}" title="Eliminar">${icon('trash')}</button></div></td></tr>`).join('');
   document.querySelector('#result-count').textContent=`${filtered.length} de ${equipment.length} equipos`;
   document.querySelector('#interval-pills').innerHTML=types.map(t=>`<span>${escape(t.label)} <strong>${number(t.intervalHours)} h</strong></span>`).join('');
 }
 async function load() {
-  loading=true; loadError=''; render();
-  try { const [items, configuredTypes, health] = await Promise.all([request('/api/equipment'),request('/api/types'),request('/health')]); equipment=items; types=configuredTypes; online=health.status==='ok'; }
-  catch(error) { loadError=error.message; online=false; }
-  finally { loading=false; render(); }
+  const sequence = ++loadSequence;
+  loading=true; loadError=''; document.querySelector('#refresh').disabled=true; render();
+  try { const [items, configuredTypes, health] = await Promise.all([request('/api/equipment'),request('/api/types'),request('/health')]); if(sequence!==loadSequence)return; equipment=items; types=configuredTypes; online=health.status==='ok'; }
+  catch(error) { if(sequence===loadSequence){loadError=error.message; online=false;} }
+  finally { if(sequence===loadSequence){loading=false; document.querySelector('#refresh').disabled=false; render();} }
 }
 const modal=document.querySelector('#modal');
 function showModal(title, subtitle, body, submitLabel, handler) {
@@ -79,7 +83,7 @@ function showModal(title, subtitle, body, submitLabel, handler) {
   modal.showModal();
 }
 function equipmentModal(e) {
-  showModal(e?'Editar equipo':'Nuevo equipo', 'Registra sus datos y el horómetro total de uso.', `<label class="field">Código del equipo<input name="code" required minlength="2" maxlength="30" pattern="[A-Za-z0-9][A-Za-z0-9_-]{1,29}" placeholder="Ej. CAM-001" value="${escape(e?.code||'')}" autocomplete="off" /></label><div class="form-grid"><label class="field">Tipo<select name="type">${Object.entries(labels).map(([value,label])=>`<option value="${value}" ${e?.type===value?'selected':''}>${label}</option>`).join('')}</select></label><label class="field">Horómetro total (h)<input type="number" name="hourmeter" min="${e?.hourmeter||0}" max="9999999" step="0.1" required value="${e?.hourmeter??0}" /></label></div><div class="form-note">${icon('clock')} ${e?'El horómetro es acumulado y no puede disminuir.':'El primer ciclo se calcula desde 0 h. Si el equipo ya recibió mantenimiento, regístralo después de crearlo.'}</div>`,e?'Guardar cambios':'Crear equipo',async form=>{
+  showModal(e?'Editar equipo':'Nuevo equipo', 'Registra sus datos y el horómetro total de uso.', `<label class="field">Código del equipo<input name="code" required minlength="2" maxlength="30" pattern="[A-Za-z0-9][A-Za-z0-9_\\-]{1,29}" placeholder="Ej. CAM-001" value="${escape(e?.code||'')}" autocomplete="off" /></label><div class="form-grid"><label class="field">Tipo<select name="type">${Object.entries(labels).map(([value,label])=>`<option value="${value}" ${e?.type===value?'selected':''}>${label}</option>`).join('')}</select></label><label class="field">Horómetro total (h)<input type="number" name="hourmeter" min="${e?.hourmeter||0}" max="9999999" step="0.1" required value="${e?.hourmeter??0}" /></label></div><div class="form-note">${icon('clock')} ${e?'El horómetro es acumulado y no puede disminuir.':'El primer ciclo se calcula desde 0 h. Si el equipo ya recibió mantenimiento, regístralo después de crearlo.'}</div>`,e?'Guardar cambios':'Crear equipo',async form=>{
     const values=new FormData(form); await request(`/api/equipment${e?`/${e.id}`:''}`,{method:e?'PUT':'POST',body:JSON.stringify({code:values.get('code'),type:values.get('type'),hourmeter:Number(values.get('hourmeter'))})}); toast(e?'Equipo actualizado.':'Equipo registrado.');
   });
 }
@@ -102,11 +106,20 @@ document.querySelector('#rows').onclick=async event=>{
     catch(error){toast(error.message);} finally{button.disabled=false;}
   }
 };
-modal.addEventListener('click',event=>{if(event.target.closest('[data-close]'))modal.close();});
+modal.addEventListener('cancel',event=>{if(submitting)event.preventDefault();});
+modal.addEventListener('click',event=>{if(!submitting && (event.target===modal || event.target.closest('[data-close]')))modal.close();});
 modal.addEventListener('submit',async event=>{
-  event.preventDefault(); const submit=event.submitter; submit.disabled=true; document.querySelector('#form-error').textContent='';
+  event.preventDefault(); if(submitting || !currentModal)return; submitting=true;
+  const submit=event.submitter || modal.querySelector('[type=submit]');
+  const controls=[...modal.querySelectorAll('button')]; controls.forEach(button=>button.disabled=true);
+  const originalLabel=submit.textContent; submit.textContent='Guardando…';
+  document.querySelector('#form-error').textContent='';
   try {await currentModal(event.target);modal.close();await load();}
   catch(error){document.querySelector('#form-error').textContent=error.message;}
-  finally{submit.disabled=false;}
+  finally{submitting=false; controls.forEach(button=>button.disabled=false);submit.textContent=originalLabel;}
 });
 load();
+
+const updateNavigation = () => document.querySelectorAll('.nav-item').forEach(link => link.classList.toggle('active', link.hash === (location.hash || '#equipos')));
+window.addEventListener('hashchange', updateNavigation);
+updateNavigation();
