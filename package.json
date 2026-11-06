@@ -1,0 +1,27 @@
+{
+  "name": "minetrack",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "workspaces": [
+    "backend",
+    "frontend"
+  ],
+  "scripts": {
+    "dev:api": "npm run dev -w backend",
+    "dev:web": "npm run dev -w frontend",
+    "build": "npm run build -w backend && npm run build -w frontend",
+    "test": "node --test tests/*.test.js",
+    "test:integration": "node --env-file-if-exists=.env --test tests/integration.test.js",
+    "test:postgres": "node scripts/local-postgres.mjs --test",
+    "dev:local": "node scripts/local-postgres.mjs",
+    "migrate": "node --env-file-if-exists=.env backend/src/migrate.js",
+    "deploy": "node --env-file-if-exists=.env scripts/deploy.mjs"
+  },
+  "devDependencies": {
+    "embedded-postgres": "18.6.0-beta.19"
+  }
+}

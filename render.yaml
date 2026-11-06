@@ -1,0 +1,51 @@
+services:
+  - type: web
+    name: minetrack-api
+    runtime: node
+    plan: free
+    region: oregon
+    branch: main
+    autoDeployTrigger: off
+    buildCommand: npm ci --omit=dev && npm run build -w backend
+    startCommand: npm start -w backend
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_VERSION
+        value: 22.22.0
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: minetrack-db
+          property: connectionString
+      - key: FRONTEND_URL
+        sync: false
+  - type: web
+    name: minetrack-web
+    runtime: static
+    branch: main
+    autoDeployTrigger: off
+    buildCommand: npm ci && npm run build -w frontend
+    staticPublishPath: frontend/dist
+    envVars:
+      - key: NODE_VERSION
+        value: 22.22.0
+      - key: VITE_API_URL
+        fromService:
+          name: minetrack-api
+          type: web
+          envVarKey: RENDER_EXTERNAL_URL
+    headers:
+      - path: /version.json
+        name: Cache-Control
+        value: no-store
+      - path: /*
+        name: X-Content-Type-Options
+        value: nosniff
+databases:
+  - name: minetrack-db
+    plan: free
+    region: oregon
+    databaseName: minetrack
+    user: minetrack
+    postgresMajorVersion: "17"

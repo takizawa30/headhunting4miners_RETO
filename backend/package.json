@@ -1,0 +1,11 @@
+{
+  "name": "@minetrack/api",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node --env-file-if-exists=../.env --watch src/server.js",
+    "start": "node src/migrate.js && node src/server.js",
+    "build": "node --check src/server.js && node --check src/app.js && node --check src/migrate.js"
+  },
+  "dependencies": { "express": "^5.1.0", "pg": "^8.16.3", "cors": "^2.8.5", "helmet": "^8.1.0", "zod": "^4.1.12" }
+}
